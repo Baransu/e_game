@@ -7,7 +7,7 @@ import Phoenix.Socket
 import Phoenix.Channel
 import Phoenix.Push
 import Json.Encode as JE
-import Json.Decode as JD exposing (field)
+import Json.Decode as JD exposing (field, list)
 import Dict
 
 
@@ -42,9 +42,9 @@ type Msg
     | SetNewMessage String
     | PhoenixMsg (Phoenix.Socket.Msg Msg)
     | ReceiveChatMessage JE.Value
+    | ReceiveMessages JE.Value
     | JoinChannel
     | LeaveChannel
-    | ShowJoinedMessage String
     | ShowLeftMessage String
     | NoOp
 
@@ -100,6 +100,11 @@ chatMessageDecoder =
         (field "body" JD.string)
 
 
+chatMessagesDecoder : JD.Decoder (List ChatMessage)
+chatMessagesDecoder =
+    field "messages" <| list chatMessageDecoder
+
+
 handleSocket : Model -> ( Phoenix.Socket.Socket Msg, Cmd (Phoenix.Socket.Msg Msg) ) -> ( Model, Cmd Msg )
 handleSocket model ( phxSocket, phxCmd ) =
     { model | phxSocket = phxSocket } ! [ Cmd.map PhoenixMsg phxCmd ]
@@ -107,6 +112,11 @@ handleSocket model ( phxSocket, phxCmd ) =
 
 
 -- UPDATE
+
+
+formatMessage : ChatMessage -> String
+formatMessage { user, body } =
+    user ++ ": " ++ body
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -135,7 +145,7 @@ update msg model =
         ReceiveChatMessage raw ->
             case JD.decodeValue chatMessageDecoder raw of
                 Ok chatMessage ->
-                    { model | messages = (chatMessage.user ++ ": " ++ chatMessage.body) :: model.messages } ! []
+                    { model | messages = formatMessage chatMessage :: model.messages } ! []
 
                 Err error ->
                     model ! []
@@ -144,7 +154,7 @@ update msg model =
             let
                 channel =
                     Phoenix.Channel.init "room:lobby"
-                        |> Phoenix.Channel.onJoin (always (ShowJoinedMessage "room:lobby"))
+                        |> Phoenix.Channel.onJoin ReceiveMessages
                         |> Phoenix.Channel.onClose (always (ShowLeftMessage "room:lobby"))
 
                 socketUpdate =
@@ -159,8 +169,13 @@ update msg model =
             in
                 handleSocket model socketUpdate
 
-        ShowJoinedMessage channelName ->
-            { model | messages = ("Joined channel " ++ channelName) :: model.messages } ! []
+        ReceiveMessages raw ->
+            case JD.decodeValue chatMessagesDecoder raw of
+                Ok messages ->
+                    { model | messages = List.map formatMessage messages } ! []
+
+                Err error ->
+                    model ! []
 
         ShowLeftMessage channelName ->
             { model | messages = ("Left channel " ++ channelName) :: model.messages } ! []

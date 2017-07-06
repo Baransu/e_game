@@ -20,6 +20,7 @@ defmodule EGame.Web.UserSocket do
   # See `Phoenix.Token` documentation for examples in
   # performing token verification on connect.
   def connect(_params, socket) do
+    # TODO some authentication
     {:ok, socket}
   end
 
