@@ -13,9 +13,11 @@ defmodule EGame.Application do
       # Start the endpoint when the application starts
       supervisor(EGame.Web.Endpoint, []),
       worker(EGame.PersistentRoom, []),
+      worker(EGame.Notifier, []),
+      supervisor(EGame.Presence, []),
 
       supervisor(EGame.Region.Supervisor, []),
-      worker(EGame.Region.Manager, [])
+      worker(EGame.Region.Pool, []),
       # Start your own worker by calling: EGame.Worker.start_link(arg1, arg2, arg3)
     ]
 

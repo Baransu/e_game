@@ -47,6 +47,7 @@ type Msg
     | LeaveChannel
     | ShowLeftMessage String
     | NoOp
+    | Any JE.Value
 
 
 type alias Model =
@@ -61,6 +62,7 @@ initPhxSocket =
     Phoenix.Socket.init socketServer
         |> Phoenix.Socket.withDebug
         |> Phoenix.Socket.on "new:msg" "room:lobby" ReceiveChatMessage
+        |> Phoenix.Socket.on "push:image" "room:lobby" Any
 
 
 initModel : Model
@@ -93,6 +95,12 @@ type alias ChatMessage =
     }
 
 
+type alias Location =
+    { x : Float
+    , y : Float
+    }
+
+
 chatMessageDecoder : JD.Decoder ChatMessage
 chatMessageDecoder =
     JD.map2 ChatMessage
@@ -103,6 +111,15 @@ chatMessageDecoder =
 chatMessagesDecoder : JD.Decoder (List ChatMessage)
 chatMessagesDecoder =
     field "messages" <| list chatMessageDecoder
+
+
+locationsDecoder : JS.Decoder (List Location)
+locationsDecoder =
+    field "locations" <|
+        list JD.map2
+            Location
+            (field "x" JD.float)
+            (field "y" JD.float)
 
 
 handleSocket : Model -> ( Phoenix.Socket.Socket Msg, Cmd (Phoenix.Socket.Msg Msg) ) -> ( Model, Cmd Msg )
@@ -122,6 +139,19 @@ formatMessage { user, body } =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        Any raw ->
+            let
+                v =
+                    Debug.log "locations" <|
+                        case JD.decodeValue chatMessageDecoder raw of
+                            Ok chatMessage ->
+                                Just chatMessage
+
+                            Err error ->
+                                Nothing
+            in
+                model ! []
+
         PhoenixMsg msg ->
             handleSocket model <| Phoenix.Socket.update msg model.phxSocket
 

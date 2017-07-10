@@ -20,8 +20,7 @@ defmodule EGame.Web.UserSocket do
   # See `Phoenix.Token` documentation for examples in
   # performing token verification on connect.
   def connect(_params, socket) do
-    # TODO some authentication
-    {:ok, socket}
+    {:ok, assign(socket, :id, UUID.uuid4())}
   end
 
   # Socket id's are topics that allow you to identify all sockets for a given user:

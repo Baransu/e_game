@@ -15,8 +15,8 @@ defmodule EGame.Region.Worker do
   end
 
   @doc "Pushes all stored players positions to socket"
-  def push_all(pid, socket) do
-    GenServer.cast(pid, {:push_all, socket})
+  def push_image(pid, socket) do
+    GenServer.cast(pid, {:push_image, socket})
   end
 
   @doc "Connects player to specific region"
@@ -26,43 +26,42 @@ defmodule EGame.Region.Worker do
 
   @doc "Removes player from state"
   def disconnect(pid, player) do
-    GenServer.cast(pid, {:dicconnect, player})
+    GenServer.cast(pid, {:disconnect, player})
   end
 
   # SERVER API
 
   def init(_) do
-    # here we should probably as DB for locations
+    # here we should probably ask DB for backup info
     # to have correct state after crash
-    {:ok, {:ok, %{}}}
+    {:ok, %{}}
   end
 
-  def handle_cast({:update_position, %{"id" => id}, position}, {sup_pid, players}) do
-    updated_players = Map.put(players, id, position)
+  def handle_cast({:update_position, %{"id" => id}, position}, players) do
+    updated_players = Map.put(players, id, %{"position" => position})
     # If user will leave region, we have to notify EGame.Region.Manager about that
     # it will provide smooth transition between regions
-    {:noreply, {sup_pid, updated_players}}
+    {:noreply, updated_players}
   end
 
-  def handle_cast({:push_all, _socket}, state) do
+  def handle_cast({:push_image, socket}, players) do
     # Stored user should be more than x and y postion in world but
     # right now we're focusing only on players cordinates
-    {_, players} = state
     locations = Enum.map(players, &get_location/1)
-    # push all to passed socket
-    IO.inspect locations
-    {:noreply, state}
+    EGame.Web.RoomChannel.push_locations(socket, %{locations: locations})
+    # IO.inspect locations
+    {:noreply, players}
   end
 
-  def handle_cast({:disconnect, %{"id" => id}}, {sup_pid, players}) do
+  def handle_cast({:disconnect, %{"id" => id}}, players) do
     updated_players = Map.delete(players, id)
-    {:noreply, {sup_pid, updated_players}}
+    {:noreply, updated_players}
   end
 
   ### HELPER FUNCTONS
 
   # Returns location map
-  defp get_location(%{"position" => {x, y}}) do
+  defp get_location({_, %{"position" => {x, y}}}) do
     %{"x" => x, "y" => y}
   end
 end
