@@ -1,7 +1,7 @@
-module Main exposing (..)
+module Main exposing (main)
 
 import Html exposing (Html, h3, div, text, ul, li, input, form, button, br, table, tbody, tr, td)
-import Html.Attributes exposing (type_, value)
+import Html.Attributes exposing (type_, value, style, width, height)
 import Html.Events exposing (onInput, onSubmit, onClick)
 import Phoenix.Socket
 import Phoenix.Channel
@@ -9,6 +9,10 @@ import Phoenix.Push
 import Json.Encode as JE
 import Json.Decode as JD exposing (field, list)
 import Dict
+import Sprite exposing (spriteEntity)
+import WebGL as GL
+import Task exposing (Task)
+import Window
 
 
 -- MAIN
@@ -46,14 +50,15 @@ type Msg
     | JoinChannel
     | LeaveChannel
     | ShowLeftMessage String
-    | NoOp
     | Any JE.Value
+    | Resize Window.Size
 
 
 type alias Model =
     { newMessage : String
     , messages : List String
     , phxSocket : Phoenix.Socket.Socket Msg
+    , size : Window.Size
     }
 
 
@@ -67,12 +72,16 @@ initPhxSocket =
 
 initModel : Model
 initModel =
-    Model "" [] initPhxSocket
+    { newMessage = ""
+    , messages = []
+    , phxSocket = initPhxSocket
+    , size = Window.Size 0 0
+    }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( initModel, Cmd.none )
+    initModel ! [ Task.perform Resize Window.size ]
 
 
 
@@ -81,7 +90,10 @@ init =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Phoenix.Socket.listen model.phxSocket PhoenixMsg
+    Sub.batch
+        [ Window.resizes Resize
+        , Phoenix.Socket.listen model.phxSocket PhoenixMsg
+        ]
 
 
 
@@ -113,13 +125,14 @@ chatMessagesDecoder =
     field "messages" <| list chatMessageDecoder
 
 
-locationsDecoder : JS.Decoder (List Location)
+locationsDecoder : JD.Decoder (List Location)
 locationsDecoder =
     field "locations" <|
-        list JD.map2
-            Location
-            (field "x" JD.float)
-            (field "y" JD.float)
+        list <|
+            JD.map2
+                Location
+                (field "x" JD.float)
+                (field "y" JD.float)
 
 
 handleSocket : Model -> ( Phoenix.Socket.Socket Msg, Cmd (Phoenix.Socket.Msg Msg) ) -> ( Model, Cmd Msg )
@@ -210,17 +223,28 @@ update msg model =
         ShowLeftMessage channelName ->
             { model | messages = ("Left channel " ++ channelName) :: model.messages } ! []
 
-        NoOp ->
-            model ! []
+        Resize size ->
+            { model | size = size } ! []
 
 
 
 -- VIEW
 
 
-view : Model -> Html Msg
-view model =
-    div []
+chatView : Model -> Html Msg
+chatView model =
+    div
+        [ style
+            [ ( "position", "absolute" )
+            , ( "left", "0px" )
+            , ( "bottom", "0px" )
+            , ( "top", "0px" )
+            , ( "height", "100vh" )
+            , ( "overflow-y", "auto" )
+            , ( "overflow-x", "hidden" )
+            , ( "background-color", "rgba(0, 0, 0, 0.25)" )
+            ]
+        ]
         [ h3 [] [ text "Channels:" ]
         , div
             []
@@ -232,6 +256,26 @@ view model =
         , h3 [] [ text "Messages:" ]
         , newMessageForm model
         , ul [] ((List.reverse << List.map renderMessage) model.messages)
+        ]
+
+
+view : Model -> Html Msg
+view model =
+    div
+        [ style
+            [ ( "background-color", "pink" )
+            , ( "overflow", "hidden" )
+            , ( "height", "100vh" )
+            , ( "width", "100vw" )
+            , ( "padding", "0" )
+            , ( "margin", "0" )
+            ]
+        ]
+        [ chatView model
+        , GL.toHtmlWith
+            [ GL.antialias, GL.depth 1 ]
+            [ width model.size.width, height model.size.height ]
+            [ spriteEntity ]
         ]
 
 
